@@ -1,60 +1,135 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>업로드 스파이크</title>
-<style>body{font:16px sans-serif;margin:16px}button{padding:12px 16px;font-size:16px}pre{white-space:pre-wrap;background:#f3f3f3;padding:8px}progress{width:100%}</style></head>
+<title>사진 업로드</title>
+<style>
+*{box-sizing:border-box}body{font:16px/1.5 -apple-system,"Malgun Gothic",sans-serif;margin:0;padding:16px;max-width:560px;color:#1f2933;background:#f5f6f7}
+h1{font-size:18px;margin:0 0 4px}.sub{color:#52606d;margin:0 0 16px}
+label{display:block;font-weight:600;margin:12px 0 4px}
+input[type=text],textarea{width:100%;padding:10px;font:inherit;border:1px solid #9aa5b1;border-radius:4px;background:#fff}
+button{padding:12px 16px;font:inherit;font-weight:600;border:0;border-radius:4px;background:#243b53;color:#fff;width:100%;margin-top:16px}
+button.sec{background:#fff;color:#243b53;border:1px solid #243b53;margin-top:8px}
+button:disabled{opacity:.5}
+#thumbs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}#thumbs img{width:72px;height:72px;object-fit:cover;border-radius:3px}
+progress{width:100%;height:14px;margin-top:12px}
+#msg{margin-top:12px;white-space:pre-wrap}.err{color:#b8272c}.ok{background:#e6f4ea;border:1px solid #2f855a;padding:12px;border-radius:4px}
+</style></head>
 <body>
-<h3>Drive 직접 업로드 테스트</h3>
-<input id="api" placeholder="Apps Script 웹앱 URL (/exec)" style="width:100%;margin-bottom:8px">
-<input id="pick" type="file" accept="image/*" multiple>
-<p><button id="go">업로드</button></p>
-<progress id="bar" value="0" max="1"></progress>
-<pre id="log"></pre>
+<h1 id="co">사진 업로드</h1><p class="sub" id="sub">링크를 확인하는 중…</p>
+<form id="f" hidden>
+  <label for="vehicle">차량 모델</label><input id="vehicle" type="text" maxlength="20" required>
+  <label for="work">작업 내용</label><input id="work" type="text" maxlength="20" required>
+  <label for="note">특이사항</label><textarea id="note" rows="3" maxlength="500"></textarea>
+  <label for="pick">사진</label>
+  <input id="pick" type="file" accept="image/*" multiple>
+  <div id="cnt"></div><div id="thumbs"></div>
+  <progress id="bar" value="0" max="1" hidden></progress>
+  <button id="go" type="submit">업로드</button>
+  <button id="retry" class="sec" type="button" hidden>실패한 사진 다시 올리기</button>
+</form>
+<div id="msg"></div>
+<script src="config.js"></script>
 <script>
 const CHUNK = 4 * 1024 * 1024; // 256KB 배수
-const log = m => { document.getElementById('log').textContent += m + '\n'; };
+const $ = id => document.getElementById(id);
+const token = new URLSearchParams(location.search).get('t') || '';
+const msg = (t, cls) => { $('msg').className = cls || ''; $('msg').textContent = t; };
 // text/plain 으로 보내 CORS preflight 를 피한다
-const api = body => fetch(document.getElementById('api').value, { method: 'POST', body: JSON.stringify(body) }).then(r => r.json());
+const api = body => fetch(API_URL, { method: 'POST', body: JSON.stringify({ token, ...body }) }).then(r => r.json());
+
+let job = null; // { receiptNo, files:[{name,size,uploadUrl}] } 현재 접수
 
 function putRange(url, blob, start, total) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open('PUT', url);
     x.setRequestHeader('Content-Range', `bytes ${start}-${start + blob.size - 1}/${total}`);
-    x.onload = () => ([200, 201, 308].includes(x.status) ? resolve(x.status) : reject(new Error('HTTP ' + x.status)));
+    x.onload = () => ([200, 201, 308].includes(x.status) ? resolve() : reject(new Error('HTTP ' + x.status)));
     x.onerror = () => reject(new Error('network'));
-    x.send(blob); // Blob 를 그대로 전송 (Base64 변환 없음)
+    x.send(blob); // Blob 그대로 전송 (Base64 변환 없음, 메모리에 전체를 올리지 않음)
   });
 }
 async function withRetry(fn, n = 5) {
   for (let i = 0; ; i++) {
     try { return await fn(); } catch (e) {
       if (i >= n - 1) throw e;
-      log('  재시도 ' + (i + 1) + ': ' + e.message);
+      msg(`네트워크 오류, 재시도 중 (${i + 1}/${n - 1})`);
       await new Promise(r => setTimeout(r, 1000 * 2 ** i));
     }
   }
 }
-document.getElementById('go').onclick = async () => {
-  const files = [...document.getElementById('pick').files];
-  if (!files.length) return log('사진을 선택하세요');
-  const t0 = performance.now();
-  const total = files.reduce((s, f) => s + f.size, 0);
-  let sent = 0;
-  const bar = document.getElementById('bar');
-  const begin = await api({ action: 'begin', files: files.map(f => ({ name: f.name, size: f.size, type: f.type })) });
-  if (!begin.ok) return log('begin 실패: ' + begin.error);
-  log('접수번호 ' + begin.receiptNo);
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i], s = begin.files[i];
-    log(`${s.name} (${(f.size / 1048576).toFixed(1)}MB)`);
+
+(async () => {
+  try {
+    const r = await api({ action: 'info' });
+    if (!r.ok) throw new Error(r.error);
+    $('co').textContent = r.name;
+    $('sub').textContent = '작업 사진을 업로드해 주세요';
+    $('f').hidden = false;
+  } catch (e) { $('sub').textContent = ''; msg(e.message === 'Failed to fetch' ? '서버에 연결할 수 없습니다' : e.message, 'err'); }
+})();
+
+$('pick').onchange = () => {
+  const fs = [...$('pick').files];
+  $('cnt').textContent = fs.length ? `${fs.length}장 선택 (${(fs.reduce((s, f) => s + f.size, 0) / 1048576).toFixed(1)}MB)` : '';
+  $('thumbs').replaceChildren(...fs.slice(0, 30).map(f => { const i = new Image(); i.src = URL.createObjectURL(f); i.onload = () => URL.revokeObjectURL(i.src); return i; }));
+};
+
+// 목록의 파일을 순서대로 업로드. 파일은 이름(01.jpg 등)의 순번으로 원본 배열과 연결
+async function sendAll(list, files, bar, base, total) {
+  let sent = base;
+  for (const s of list) {
+    const f = files[parseInt(s.name, 10) - 1];
     for (let off = 0; off < f.size; off += CHUNK) {
       const part = f.slice(off, Math.min(off + CHUNK, f.size));
       await withRetry(() => putRange(s.uploadUrl, part, off, f.size));
       sent += part.size; bar.value = sent / total;
     }
   }
-  const v = await api({ action: 'verify', folderId: begin.folderId, files: begin.files.map(f => ({ name: f.name, size: f.size })) });
-  log(v.ok ? `검증 성공: Drive 파일 ${v.count}개 일치` : '검증 실패: ' + JSON.stringify(v));
-  log(((performance.now() - t0) / 1000).toFixed(1) + '초');
+}
+
+async function finish(files) {
+  const c = await api({ action: 'commit', receiptNo: job.receiptNo });
+  if (c.ok) {
+    $('f').hidden = true;
+    msg(`업로드가 완료되었습니다.\n접수번호: ${c.receiptNo}\n사진 ${c.count}장`, 'ok');
+    job = null; return;
+  }
+  throw new Error('일부 사진이 서버에 저장되지 않았습니다. "실패한 사진 다시 올리기"를 눌러 주세요.');
+}
+
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const files = [...$('pick').files];
+  if (!files.length) return msg('사진을 선택해 주세요', 'err');
+  $('go').disabled = true; $('retry').hidden = true; $('bar').hidden = false; $('bar').value = 0;
+  try {
+    msg('업로드 준비 중…');
+    const b = await api({ action: 'begin', vehicle: $('vehicle').value, work: $('work').value, note: $('note').value,
+      files: files.map(f => ({ name: f.name, size: f.size, type: f.type })) });
+    if (!b.ok) throw new Error(b.error);
+    job = { receiptNo: b.receiptNo, files };
+    msg(`업로드 중… 접수번호 ${b.receiptNo}\n이 화면을 닫지 마세요.`);
+    await sendAll(b.files, files, $('bar'), 0, files.reduce((s, f) => s + f.size, 0));
+    msg('저장 확인 중…');
+    await finish(files);
+  } catch (err) {
+    msg(err.message + (job ? `\n(접수번호 ${job.receiptNo})` : ''), 'err');
+    if (job) $('retry').hidden = false;
+  } finally { $('go').disabled = false; }
+};
+
+$('retry').onclick = async () => {
+  const files = [...$('pick').files];
+  if (!job || files.length !== job.files.length) return msg('처음 선택했던 사진을 그대로 다시 선택해 주세요', 'err');
+  $('retry').disabled = true;
+  try {
+    msg('다시 올리는 중…');
+    const r = await api({ action: 'resume', receiptNo: job.receiptNo });
+    if (!r.ok) throw new Error(r.error);
+    $('bar').value = 0;
+    await sendAll(r.files, files, $('bar'), 0, r.files.reduce((s, x) => s + x.size, 0) || 1);
+    await finish(files);
+  } catch (err) { msg(err.message, 'err'); }
+  finally { $('retry').disabled = false; }
 };
 </script></body></html>
