@@ -17,8 +17,9 @@ table{border-collapse:collapse;width:100%;background:#fff}
 th,td{border:1px solid #d9dee3;padding:5px 8px;text-align:left;vertical-align:top}
 th{background:#eef1f4;white-space:nowrap}
 .tag{padding:1px 6px;border-radius:3px;font-size:12px}
-.s-ok{background:#e6f4ea;color:#1e6b3a}.s-wait{background:#fff4d6;color:#8a5a00}.s-off{background:#eee;color:#666}
+.s-new{background:#dbeafe;color:#1d4ed8;font-weight:600}.s-ok{background:#e6f4ea;color:#1e6b3a}.s-wait{background:#fff4d6;color:#8a5a00}.s-off{background:#eee;color:#666}
 .row{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+select{padding:6px 8px;font:inherit;border:1px solid #9aa5b1;border-radius:3px;background:#fff}
 input[type=text],input[type=password],input[type=number]{padding:6px 8px;font:inherit;border:1px solid #9aa5b1;border-radius:3px}
 #msg{margin:8px 0;min-height:20px}.err{color:#b8272c}.ok{color:#1e6b3a}
 #login{max-width:320px;margin:60px auto;background:#fff;padding:20px;border:1px solid #d9dee3}
@@ -48,8 +49,9 @@ input[type=text],input[type=password],input[type=number]{padding:6px 8px;font:in
 
   <section id="p2" hidden>
     <div class="row"><input id="q" type="text" placeholder="업체/차량/작업/접수번호 검색" style="width:280px">
-      <button class="btn" id="rf">새로고침</button></div>
-    <table><thead><tr><th>접수번호</th><th>업체</th><th>차량</th><th>작업</th><th>접수일시</th><th>상태</th><th>사진</th><th>용량</th><th>특이사항</th></tr></thead><tbody id="rbody"></tbody></table>
+      <select id="flt"><option value="">전체</option><option value="new">신규 (다운로드 미확인)</option><option value="done">다운로드 확인함</option><option value="gone">삭제됨</option></select>
+      <button class="btn" id="rf">새로고침</button><span id="storage" class="note"></span></div>
+    <table><thead><tr><th>접수번호</th><th>업체</th><th>차량</th><th>작업</th><th>접수일시</th><th>상태</th><th>사진</th><th>용량</th><th>다운로드</th><th>특이사항</th></tr></thead><tbody id="rbody"></tbody></table>
   </section>
 </main>
 </div>
@@ -134,20 +136,47 @@ $('cf').onsubmit = async e => {
 
 let receipts = [];
 async function loadReceipts() {
-  try { receipts = (await call({ action: 'receiptList' })).receipts; drawReceipts(); } catch (e) { msg(e.message, 'err'); }
+  try {
+    const r = await call({ action: 'receiptList' });
+    receipts = r.receipts;
+    const gb = x => (Number(x) / 1073741824).toFixed(1) + 'GB';
+    $('storage').textContent = '드라이브 ' + gb(r.storage.used) + ' / ' + gb(r.storage.limit) + ' 사용';
+    drawReceipts();
+  } catch (e) { msg(e.message, 'err'); }
 }
 function drawReceipts() {
-  const q = $('q').value.trim().toLowerCase();
-  const rows = receipts.filter(r => !q || [r.no, r.company, r.vehicle, r.work].join(' ').toLowerCase().includes(q));
+  const q = $('q').value.trim().toLowerCase(), f = $('flt').value;
+  const rows = receipts.filter(r => {
+    if (q && ![r.no, r.company, r.vehicle, r.work].join(' ').toLowerCase().includes(q)) return false;
+    const gone = r.deleted === '삭제됨', done = !!r.downloaded;
+    if (f === 'new') return r.status === '접수완료' && !done && !gone;
+    if (f === 'done') return done && !gone;
+    if (f === 'gone') return gone;
+    return true;
+  });
   $('rbody').replaceChildren(...rows.map(r => {
-    const tr = mk('tr'), done = r.status === '접수완료';
+    const tr = mk('tr'), complete = r.status === '접수완료', gone = r.deleted === '삭제됨';
     tr.append(mk('td', r.no), mk('td', r.company), mk('td', r.vehicle), mk('td', r.work), mk('td', r.at), mk('td'),
-      mk('td', r.count + '장'), mk('td', mb(r.bytes)), mk('td', r.note, 'note'));
-    tr.children[5].append(mk('span', r.status, 'tag ' + (done ? 's-ok' : 's-wait')));
+      mk('td', r.count + '장'), mk('td', mb(r.bytes)), mk('td'), mk('td', r.note, 'note'));
+    const st = tr.children[5];
+    if (!complete) st.append(mk('span', r.status, 'tag s-wait'));
+    else if (gone) st.append(mk('span', '삭제됨', 'tag s-off'));
+    else if (!r.downloaded) st.append(mk('span', '신규', 'tag s-new'));
+    else st.append(mk('span', '확인함', 'tag s-ok'));
+    const dl = tr.children[8];
+    if (r.downloaded) dl.textContent = r.downloaded;
+    else if (complete && !gone) {
+      const b = mk('button', '다운로드 확인', 'btn');
+      b.onclick = async () => {
+        try { await call({ action: 'receiptDownloaded', no: r.no }); msg(r.no + ' 다운로드 확인을 기록했습니다', 'ok'); loadReceipts(); }
+        catch (e) { msg(e.message, 'err'); }
+      };
+      dl.append(b);
+    }
     return tr;
   }));
 }
-$('q').oninput = drawReceipts; $('rf').onclick = loadReceipts;
+$('q').oninput = drawReceipts; $('flt').onchange = drawReceipts; $('rf').onclick = loadReceipts;
 
 if (session) { show(true); loadCompanies(); } else show(false);
 </script></body></html>
