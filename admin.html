@@ -56,6 +56,7 @@ h2{font-size:28px;margin:6px 0 14px;letter-spacing:-.3px}
 .tint:disabled{opacity:.35}
 .tbtn{border:0;background:transparent;color:var(--blue);padding:6px 8px}
 .tbtn.red{color:var(--red)}.tbtn:disabled{opacity:.3}
+.mini{width:90px;border:0;background:var(--fill);color:var(--text);font:inherit;padding:5px 8px;border-radius:7px;outline:0}
 
 /* 표 */
 .scroll{overflow-x:auto}
@@ -115,7 +116,7 @@ tr:last-child td{border-bottom:0}
       </div>
       <div class="sec">등록된 업체</div>
       <div class="card scroll"><table>
-        <thead><tr><th>ID</th><th>업체명</th><th>상태</th><th>월 한도</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>업체명</th><th>상태</th><th>이번 달 사용 / 월 한도</th><th></th></tr></thead>
         <tbody id="cbody"></tbody>
       </table></div>
     </section>
@@ -198,22 +199,46 @@ async function copy(text) {
   catch (e) { prompt('복사해서 사용하세요', text); }
 }
 
+// 월 한도 칸: 보기 / 수정 전환
+function limitCell(td, c) {
+  const view = () => {
+    td.replaceChildren(mk('span', `${(c.usedBytes / 1048576).toFixed(0)} / ${c.limitMB}MB`));
+    const b = mk('button', '수정', 'tbtn'); b.onclick = edit; td.append(' ', b);
+  };
+  const edit = () => {
+    const inp = document.createElement('input'); inp.type = 'number'; inp.min = 1; inp.value = c.limitMB; inp.className = 'mini';
+    const save = mk('button', '저장', 'tint'), cancel = mk('button', '취소', 'tbtn');
+    save.onclick = async () => {
+      try { const r = await call({ action: 'companyLimit', id: c.id, limitMB: inp.value }); c.limitMB = r.limitMB; msg('월 한도를 변경했습니다'); view(); }
+      catch (e) { msg(e.message, 'err'); }
+    };
+    cancel.onclick = view;
+    inp.onkeydown = e => { if (e.key === 'Enter') save.click(); if (e.key === 'Escape') cancel.click(); };
+    td.replaceChildren(inp, ' ', save, cancel); inp.focus();
+  };
+  view();
+}
+
 async function loadCompanies() {
   try {
     const { companies } = await call({ action: 'companyList' });
     if (!companies.length) { $('cbody').replaceChildren(emptyRow('등록된 업체가 없습니다', 5)); return; }
     $('cbody').replaceChildren(...companies.map(c => {
       const tr = mk('tr'), active = c.status === '사용';
-      tr.append(mk('td', c.id, 'sub num'), mk('td', c.name), mk('td'), mk('td', c.limitMB + 'MB', 'num'), mk('td', null, 'acts'));
+      tr.append(mk('td', c.id, 'sub num'), mk('td', c.name), mk('td'), mk('td', null, 'num'), mk('td', null, 'acts'));
       tr.children[2].append(mk('span', c.status, 'pill ' + (active ? 'p-ok' : 'p-off')));
-      const cp = mk('button', '링크 복사', 'tint'); cp.disabled = !active; cp.onclick = () => copy(linkOf(c.token));
+      limitCell(tr.children[3], c);
+      const cp = mk('button', '링크 복사', 'tint'); cp.onclick = () => copy(linkOf(c.token));
       const ri = mk('button', '재발급', 'tbtn');
       ri.onclick = async () => { if (!confirm(c.name + ' 링크를 재발급할까요?\n이전 링크는 즉시 사용할 수 없게 되고, 업체는 새 링크로 앱을 다시 추가해야 합니다.')) return;
         try { await call({ action: 'companyReissue', id: c.id }); msg('재발급했습니다. 새 링크를 복사해 전달하세요'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
-      const rv = mk('button', '폐기', 'tbtn red'); rv.disabled = !active;
+      const rv = mk('button', '폐기', 'tbtn red');
       rv.onclick = async () => { if (!confirm(c.name + ' 링크를 폐기할까요?\n이 링크로는 더 이상 업로드할 수 없습니다.')) return;
         try { await call({ action: 'companyRevoke', id: c.id }); msg('폐기했습니다'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
-      tr.children[4].append(cp, ri, rv);
+      const del = mk('button', '삭제', 'tbtn red');
+      del.onclick = async () => { if (!confirm(c.name + ' 업체를 목록에서 완전히 삭제할까요?\n드라이브의 사진 폴더와 접수 기록은 그대로 남고, 이 링크는 다시 쓸 수 없습니다.')) return;
+        try { await call({ action: 'companyDelete', id: c.id }); msg('삭제했습니다'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
+      tr.children[4].append(...(active ? [cp, ri, rv] : [ri, del]));
       return tr;
     }));
   } catch (e) { msg(e.message, 'err'); }
