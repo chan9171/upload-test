@@ -29,6 +29,7 @@ button{font:inherit;cursor:pointer;color:inherit}
 .lbox .field{background:var(--card);border-radius:12px;overflow:hidden;margin-bottom:12px}
 .lbox input{width:100%;border:0;background:transparent;color:var(--text);font:inherit;font-size:17px;padding:14px 16px;outline:0}
 .lerr{color:var(--red);min-height:20px;margin-top:10px;font-size:14px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* 상단 바 */
 header{position:sticky;top:0;z-index:5;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:.5px solid var(--line)}
@@ -86,8 +87,9 @@ tr:last-child td{border-bottom:0}
   <div class="lbox">
     <img src="admin-icon-192.png" alt="">
     <h1>J Shine 관리자</h1>
-    <form id="lf">
-      <div class="field"><input id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" required></div>
+    <form id="lf" method="post" action="#">
+      <input class="sr" type="text" name="username" autocomplete="username" value="관리자" tabindex="-1" aria-hidden="true">
+      <div class="field"><input id="pw" name="password" type="password" autocomplete="current-password" placeholder="비밀번호" required></div>
       <button class="pbtn" style="width:100%;padding:13px" type="submit">로그인</button>
     </form>
     <div id="lmsg" class="lerr"></div>
