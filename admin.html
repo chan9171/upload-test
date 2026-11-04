@@ -1,60 +1,142 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex,nofollow">
-<title>사진 접수 관리</title>
+<title>J Shine 관리자</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="admin-apple-touch-icon.png">
+<link rel="manifest" href="admin.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="J Shine 관리자">
 <style>
-*{box-sizing:border-box}body{font:14px/1.5 -apple-system,"Malgun Gothic",sans-serif;margin:0;color:#1f2933;background:#f5f6f7}
-header{background:#243b53;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px}
-header h1{font-size:16px;margin:0;flex:1}
-main{padding:16px;max-width:1100px;margin:0 auto}
-nav{display:flex;gap:4px;margin-bottom:12px}
-nav button{border:1px solid #9aa5b1;background:#fff;padding:6px 14px;cursor:pointer;font:inherit}
-nav button.on{background:#243b53;color:#fff;border-color:#243b53}
-button{font:inherit;cursor:pointer}
-.btn{padding:5px 10px;border:1px solid #243b53;background:#fff;color:#243b53;border-radius:3px}
-.btn.pri{background:#243b53;color:#fff}.btn.warn{border-color:#b8272c;color:#b8272c}
-table{border-collapse:collapse;width:100%;background:#fff}
-th,td{border:1px solid #d9dee3;padding:5px 8px;text-align:left;vertical-align:top}
-th{background:#eef1f4;white-space:nowrap}
-.tag{padding:1px 6px;border-radius:3px;font-size:12px}
-.s-new{background:#dbeafe;color:#1d4ed8;font-weight:600}.s-ok{background:#e6f4ea;color:#1e6b3a}.s-wait{background:#fff4d6;color:#8a5a00}.s-off{background:#eee;color:#666}
-.row{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
-select{padding:6px 8px;font:inherit;border:1px solid #9aa5b1;border-radius:3px;background:#fff}
-input[type=text],input[type=password],input[type=number]{padding:6px 8px;font:inherit;border:1px solid #9aa5b1;border-radius:3px}
-#msg{margin:8px 0;min-height:20px}.err{color:#b8272c}.ok{color:#1e6b3a}
-#login{max-width:320px;margin:60px auto;background:#fff;padding:20px;border:1px solid #d9dee3}
-#login h2{margin:0 0 12px;font-size:16px}#login input{width:100%;margin-bottom:10px}
-.note{max-width:260px;color:#52606d}
+:root{--bg:#f2f2f7;--card:#fff;--text:#000;--sub:#8e8e93;--line:#e5e5ea;--blue:#007aff;--red:#ff3b30;--green:#34c759;--orange:#ff9f0a;--fill:#e5e5ea;--bar:rgba(249,249,249,.85);
+  --new-bg:rgba(0,122,255,.12);--ok-bg:rgba(52,199,89,.16);--wait-bg:rgba(255,159,10,.18);--off-bg:rgba(142,142,147,.18)}
+@media(prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#fff;--line:#38383a;--blue:#0a84ff;--red:#ff453a;--green:#30d158;--orange:#ff9f0a;--fill:#2c2c2e;--bar:rgba(22,22,24,.85)}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+button{font:inherit;cursor:pointer;color:inherit}
+[hidden]{display:none!important}
+
+/* 로그인 */
+#login{min-height:100vh;display:grid;place-items:center;padding:24px}
+.lbox{width:100%;max-width:340px;text-align:center}
+.lbox img{width:84px;height:84px;border-radius:19px;margin-bottom:14px}
+.lbox h1{font-size:26px;margin:0 0 20px;letter-spacing:-.3px}
+.lbox .field{background:var(--card);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.lbox input{width:100%;border:0;background:transparent;color:var(--text);font:inherit;font-size:17px;padding:14px 16px;outline:0}
+.lerr{color:var(--red);min-height:20px;margin-top:10px;font-size:14px}
+
+/* 상단 바 */
+header{position:sticky;top:0;z-index:5;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:.5px solid var(--line)}
+.hin{max-width:1120px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:16px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+.brand img{width:28px;height:28px;border-radius:7px}
+.seg{display:inline-flex;background:var(--fill);border-radius:9px;padding:2px}
+.hin .seg{margin:0 auto}
+.seg button{border:0;background:transparent;padding:5px 18px;border-radius:7px;font-weight:500}
+.seg button.on{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.15);font-weight:600}
+.link{border:0;background:transparent;color:var(--blue);padding:6px 4px}
+
+main{max-width:1120px;margin:0 auto;padding:20px 20px 60px}
+h2{font-size:28px;margin:6px 0 14px;letter-spacing:-.3px}
+.card{background:var(--card);border-radius:12px;overflow:hidden}
+.sec{font-size:13px;color:var(--sub);margin:22px 16px 6px}
+
+/* 폼 */
+.form{display:flex;gap:10px;flex-wrap:wrap;padding:12px}
+.form input{flex:1;min-width:150px;border:0;background:var(--fill);color:var(--text);font:inherit;padding:10px 12px;border-radius:9px;outline:0}
+.pbtn{border:0;background:var(--blue);color:#fff;font-weight:600;padding:10px 18px;border-radius:9px}
+.pbtn:active{opacity:.8}
+.tint{border:0;background:var(--new-bg);color:var(--blue);font-weight:600;padding:6px 12px;border-radius:8px}
+.tint:disabled{opacity:.35}
+.tbtn{border:0;background:transparent;color:var(--blue);padding:6px 8px}
+.tbtn.red{color:var(--red)}.tbtn:disabled{opacity:.3}
+
+/* 표 */
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th{text-align:left;font-size:12px;font-weight:500;color:var(--sub);padding:10px 14px;border-bottom:.5px solid var(--line);white-space:nowrap}
+td{padding:11px 14px;border-bottom:.5px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.sub{color:var(--sub);font-size:13px}
+.acts{white-space:nowrap;text-align:right}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.p-new{background:var(--new-bg);color:var(--blue)}.p-ok{background:var(--ok-bg);color:var(--green)}
+.p-wait{background:var(--wait-bg);color:var(--orange)}.p-off{background:var(--off-bg);color:var(--sub)}
+.empty{padding:28px;text-align:center;color:var(--sub)}
+
+/* 접수 도구줄 */
+.tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.search{flex:1;min-width:200px;border:0;background:var(--fill);color:var(--text);font:inherit;padding:9px 12px;border-radius:9px;outline:0}
+.store{margin:0 0 14px;font-size:13px;color:var(--sub)}
+.sbar{height:6px;border-radius:3px;background:var(--fill);overflow:hidden;margin-top:6px;max-width:360px}
+.sbar i{display:block;height:100%;background:var(--blue)}
+
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(40,40,42,.94);color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;max-width:88vw;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+#toast.err{background:rgba(200,40,30,.95)}
 </style></head>
 <body>
+
 <div id="login">
-  <h2>관리자 로그인</h2>
-  <form id="lf"><input id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" required>
-  <button class="btn pri" style="width:100%;padding:8px" type="submit">로그인</button></form>
-  <div id="lmsg" class="err"></div>
+  <div class="lbox">
+    <img src="admin-icon-192.png" alt="">
+    <h1>J Shine 관리자</h1>
+    <form id="lf">
+      <div class="field"><input id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" required></div>
+      <button class="pbtn" style="width:100%;padding:13px" type="submit">로그인</button>
+    </form>
+    <div id="lmsg" class="lerr"></div>
+  </div>
 </div>
 
 <div id="app" hidden>
-<header><h1>J Shine 사진 접수 관리</h1><button class="btn" id="out">로그아웃</button></header>
-<main>
-  <nav><button id="t1" class="on">업체</button><button id="t2">접수 목록</button></nav>
-  <div id="msg"></div>
+  <header><div class="hin">
+    <div class="brand"><img src="admin-icon-192.png" alt="">J Shine</div>
+    <div class="seg"><button id="t1" class="on">업체</button><button id="t2">접수 목록</button></div>
+    <button class="link" id="out">로그아웃</button>
+  </div></header>
 
-  <section id="p1">
-    <form id="cf" class="row"><input id="cname" type="text" placeholder="업체명" maxlength="40" required>
-      <input id="climit" type="number" min="1" placeholder="월 용량 한도(MB)" style="width:160px">
-      <button class="btn pri" type="submit">업체 등록</button></form>
-    <table><thead><tr><th>ID</th><th>업체명</th><th>상태</th><th>월 한도</th><th>링크</th></tr></thead><tbody id="cbody"></tbody></table>
-  </section>
+  <main>
+    <section id="p1">
+      <h2>업체</h2>
+      <div class="card">
+        <form id="cf" class="form">
+          <input id="cname" type="text" placeholder="새 업체명" maxlength="40" required>
+          <input id="climit" type="number" min="1" placeholder="월 업로드 한도 (MB, 비우면 2000)" style="max-width:260px">
+          <button class="pbtn" type="submit">업체 등록</button>
+        </form>
+      </div>
+      <div class="sec">등록된 업체</div>
+      <div class="card scroll"><table>
+        <thead><tr><th>ID</th><th>업체명</th><th>상태</th><th>월 한도</th><th></th></tr></thead>
+        <tbody id="cbody"></tbody>
+      </table></div>
+    </section>
 
-  <section id="p2" hidden>
-    <div class="row"><input id="q" type="text" placeholder="업체/차량/작업/접수번호 검색" style="width:280px">
-      <select id="flt"><option value="">전체</option><option value="new">신규 (다운로드 미확인)</option><option value="done">다운로드 확인함</option><option value="gone">삭제됨</option></select>
-      <button class="btn" id="rf">새로고침</button><span id="storage" class="note"></span></div>
-    <table><thead><tr><th>접수번호</th><th>업체</th><th>작업 대상</th><th>작업 내용</th><th>접수일시</th><th>상태</th><th>사진</th><th>용량</th><th>다운로드</th><th>특이사항</th></tr></thead><tbody id="rbody"></tbody></table>
-  </section>
-</main>
+    <section id="p2" hidden>
+      <h2>접수 목록</h2>
+      <div class="store"><span id="storage"></span><div class="sbar" id="sbarwrap" hidden><i id="sbar"></i></div></div>
+      <div class="tools">
+        <input id="q" class="search" type="search" placeholder="업체, 작업, 접수번호 검색">
+        <div class="seg" id="flt">
+          <button data-f="" class="on">전체</button><button data-f="new">신규</button><button data-f="done">확인함</button><button data-f="gone">삭제됨</button>
+        </div>
+        <button class="tbtn" id="rf">새로고침</button>
+      </div>
+      <div class="card scroll"><table>
+        <thead><tr><th>접수번호</th><th>업체</th><th>작업</th><th>접수일시</th><th>사진</th><th>상태</th><th>다운로드</th></tr></thead>
+        <tbody id="rbody"></tbody>
+      </table></div>
+    </section>
+  </main>
 </div>
+
+<div id="toast" hidden></div>
 
 <script src="config.js"></script>
 <script>
@@ -70,10 +152,19 @@ const call = async body => {
   }
   return r;
 };
-const msg = (t, cls) => { $('msg').className = cls || ''; $('msg').textContent = t || ''; };
+let toastTimer;
+function msg(t, kind) {
+  const el = $('toast'); clearTimeout(toastTimer);
+  if (!t) { el.hidden = true; return; }
+  el.textContent = t; el.className = kind === 'err' ? 'err' : ''; el.hidden = false;
+  toastTimer = setTimeout(() => { el.hidden = true; }, kind === 'err' ? 6000 : 3000);
+}
 const mk = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
 const mb = b => (Number(b) / 1048576).toFixed(1) + 'MB';
 const linkOf = token => new URL('index.html?t=' + token, location.href).href;
+function emptyRow(text, cols) {
+  const tr = mk('tr'), td = mk('td', text, 'empty'); td.colSpan = cols; tr.append(td); return tr;
+}
 
 function show(logged) { $('login').hidden = logged; $('app').hidden = !logged; }
 function logout(expired) {
@@ -101,25 +192,26 @@ function tab(n) {
 $('t1').onclick = () => tab(1); $('t2').onclick = () => tab(2);
 
 async function copy(text) {
-  try { await navigator.clipboard.writeText(text); msg('링크를 복사했습니다', 'ok'); }
+  try { await navigator.clipboard.writeText(text); msg('링크를 복사했습니다'); }
   catch (e) { prompt('복사해서 사용하세요', text); }
 }
 
 async function loadCompanies() {
   try {
     const { companies } = await call({ action: 'companyList' });
+    if (!companies.length) { $('cbody').replaceChildren(emptyRow('등록된 업체가 없습니다', 5)); return; }
     $('cbody').replaceChildren(...companies.map(c => {
       const tr = mk('tr'), active = c.status === '사용';
-      tr.append(mk('td', c.id), mk('td', c.name), mk('td'), mk('td', c.limitMB + 'MB'), mk('td'));
-      tr.children[2].append(mk('span', c.status, 'tag ' + (active ? 's-ok' : 's-off')));
-      const cp = mk('button', '링크 복사', 'btn pri'); cp.disabled = !active; cp.onclick = () => copy(linkOf(c.token));
-      const rv = mk('button', '폐기', 'btn warn'); rv.disabled = !active;
-      rv.onclick = async () => { if (!confirm(c.name + ' 링크를 폐기할까요? 이 링크로는 더 이상 업로드할 수 없습니다.')) return;
-        try { await call({ action: 'companyRevoke', id: c.id }); msg('폐기했습니다', 'ok'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
-      const ri = mk('button', '재발급', 'btn');
-      ri.onclick = async () => { if (!confirm(c.name + ' 링크를 재발급할까요? 이전 링크는 즉시 사용할 수 없게 됩니다.')) return;
-        try { await call({ action: 'companyReissue', id: c.id }); msg('재발급했습니다. 새 링크를 복사해 전달하세요', 'ok'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
-      tr.children[4].append(cp, ' ', rv, ' ', ri);
+      tr.append(mk('td', c.id, 'sub num'), mk('td', c.name), mk('td'), mk('td', c.limitMB + 'MB', 'num'), mk('td', null, 'acts'));
+      tr.children[2].append(mk('span', c.status, 'pill ' + (active ? 'p-ok' : 'p-off')));
+      const cp = mk('button', '링크 복사', 'tint'); cp.disabled = !active; cp.onclick = () => copy(linkOf(c.token));
+      const ri = mk('button', '재발급', 'tbtn');
+      ri.onclick = async () => { if (!confirm(c.name + ' 링크를 재발급할까요?\n이전 링크는 즉시 사용할 수 없게 되고, 업체는 새 링크로 앱을 다시 추가해야 합니다.')) return;
+        try { await call({ action: 'companyReissue', id: c.id }); msg('재발급했습니다. 새 링크를 복사해 전달하세요'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
+      const rv = mk('button', '폐기', 'tbtn red'); rv.disabled = !active;
+      rv.onclick = async () => { if (!confirm(c.name + ' 링크를 폐기할까요?\n이 링크로는 더 이상 업로드할 수 없습니다.')) return;
+        try { await call({ action: 'companyRevoke', id: c.id }); msg('폐기했습니다'); loadCompanies(); } catch (e) { msg(e.message, 'err'); } };
+      tr.children[4].append(cp, ri, rv);
       return tr;
     }));
   } catch (e) { msg(e.message, 'err'); }
@@ -130,45 +222,50 @@ $('cf').onsubmit = async e => {
   try {
     const r = await call({ action: 'companyCreate', name: $('cname').value, limitMB: $('climit').value });
     $('cname').value = ''; $('climit').value = '';
-    msg(r.company.name + ' 등록 완료. 목록에서 링크를 복사하세요', 'ok'); loadCompanies();
+    msg(r.company.name + ' 등록 완료. 목록에서 링크를 복사하세요'); loadCompanies();
   } catch (err) { msg(err.message, 'err'); }
 };
 
-let receipts = [];
+let receipts = [], filter = '';
 async function loadReceipts() {
   try {
     const r = await call({ action: 'receiptList' });
     receipts = r.receipts;
     const gb = x => (Number(x) / 1073741824).toFixed(1) + 'GB';
     $('storage').textContent = '드라이브 ' + gb(r.storage.used) + ' / ' + gb(r.storage.limit) + ' 사용';
+    const pct = r.storage.limit ? Math.min(100, r.storage.used / r.storage.limit * 100) : 0;
+    $('sbarwrap').hidden = !r.storage.limit; $('sbar').style.width = pct + '%';
+    $('sbar').style.background = pct > 90 ? 'var(--red)' : pct > 75 ? 'var(--orange)' : 'var(--blue)';
     drawReceipts();
   } catch (e) { msg(e.message, 'err'); }
 }
 function drawReceipts() {
-  const q = $('q').value.trim().toLowerCase(), f = $('flt').value;
+  const q = $('q').value.trim().toLowerCase();
   const rows = receipts.filter(r => {
     if (q && ![r.no, r.company, r.vehicle, r.work].join(' ').toLowerCase().includes(q)) return false;
     const gone = r.deleted === '삭제됨', done = !!r.downloaded;
-    if (f === 'new') return r.status === '접수완료' && !done && !gone;
-    if (f === 'done') return done && !gone;
-    if (f === 'gone') return gone;
+    if (filter === 'new') return r.status === '접수완료' && !done && !gone;
+    if (filter === 'done') return done && !gone;
+    if (filter === 'gone') return gone;
     return true;
   });
+  if (!rows.length) { $('rbody').replaceChildren(emptyRow('표시할 접수가 없습니다', 7)); return; }
   $('rbody').replaceChildren(...rows.map(r => {
     const tr = mk('tr'), complete = r.status === '접수완료', gone = r.deleted === '삭제됨';
-    tr.append(mk('td', r.no), mk('td', r.company), mk('td', r.vehicle), mk('td', r.work), mk('td', r.at), mk('td'),
-      mk('td', r.count + '장'), mk('td', mb(r.bytes)), mk('td'), mk('td', r.note, 'note'));
+    const work = mk('td'); work.append(mk('div', [r.vehicle, r.work].filter(Boolean).join(' · ')));
+    if (r.note) work.append(mk('div', r.note, 'sub'));
+    tr.append(mk('td', r.no, 'num'), mk('td', r.company), work, mk('td', r.at, 'sub num'), mk('td', r.count + '장 · ' + mb(r.bytes), 'num'), mk('td'), mk('td'));
     const st = tr.children[5];
-    if (!complete) st.append(mk('span', r.status, 'tag s-wait'));
-    else if (gone) st.append(mk('span', '삭제됨', 'tag s-off'));
-    else if (!r.downloaded) st.append(mk('span', '신규', 'tag s-new'));
-    else st.append(mk('span', '확인함', 'tag s-ok'));
-    const dl = tr.children[8];
-    if (r.downloaded) dl.textContent = r.downloaded;
+    if (!complete) st.append(mk('span', r.status, 'pill p-wait'));
+    else if (gone) st.append(mk('span', '삭제됨', 'pill p-off'));
+    else if (!r.downloaded) st.append(mk('span', '신규', 'pill p-new'));
+    else st.append(mk('span', '확인함', 'pill p-ok'));
+    const dl = tr.children[6];
+    if (r.downloaded) { dl.textContent = r.downloaded; dl.className = 'sub num'; }
     else if (complete && !gone) {
-      const b = mk('button', '다운로드 확인', 'btn');
+      const b = mk('button', '다운로드 확인', 'tint');
       b.onclick = async () => {
-        try { await call({ action: 'receiptDownloaded', no: r.no }); msg(r.no + ' 다운로드 확인을 기록했습니다', 'ok'); loadReceipts(); }
+        try { await call({ action: 'receiptDownloaded', no: r.no }); msg(r.no + ' 다운로드 확인을 기록했습니다'); loadReceipts(); }
         catch (e) { msg(e.message, 'err'); }
       };
       dl.append(b);
@@ -176,7 +273,11 @@ function drawReceipts() {
     return tr;
   }));
 }
-$('q').oninput = drawReceipts; $('flt').onchange = drawReceipts; $('rf').onclick = loadReceipts;
+$('q').oninput = drawReceipts; $('rf').onclick = loadReceipts;
+$('flt').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  filter = b.dataset.f; [...$('flt').children].forEach(x => x.className = x === b ? 'on' : ''); drawReceipts();
+};
 
 if (session) { show(true); loadCompanies(); } else show(false);
 </script></body></html>
