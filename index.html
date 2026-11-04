@@ -266,22 +266,34 @@ function setApp(name) {
   const m = { name: title, short_name: title, start_url: location.href, scope: new URL('./', location.href).href, display: 'standalone',
     background_color: '#f2f2f7', theme_color: '#f2f2f7',
     icons: [{ src: abs('icon-192.png'), sizes: '192x192', type: 'image/png' }, { src: abs('icon-512.png'), sizes: '512x512', type: 'image/png' }] };
-  const l = document.createElement('link'); l.rel = 'manifest';
+  let l = document.querySelector('link[rel=manifest]');
+  if (!l) { l = document.createElement('link'); l.rel = 'manifest'; document.head.append(l); }
   l.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' }));
-  document.head.append(l);
 }
+
+// 업체명을 폰에 기억해 두고 입력 화면을 먼저 띄운다. 링크 확인은 뒤에서 하며, 업로드할 때 서버가 다시 검증한다
+const cacheKey = 'co:' + token;
+const cached = (() => { try { return localStorage.getItem(cacheKey) || ''; } catch (e) { return ''; } })();
+function showForm(name) {
+  $('co').textContent = name; setApp(name);
+  $('loading').hidden = true; $('form').hidden = false; $('bottom').hidden = false; refresh();
+}
+function showError(t) {
+  $('form').hidden = true; $('bottom').hidden = true;
+  $('loading').hidden = false; $('loading').textContent = t; $('loading').style.color = 'var(--red)';
+}
+if (cached) showForm(cached);
 
 (async () => {
   try {
     const r = await api({ action: 'info' });
-    if (!r.ok) throw new Error(r.error);
-    $('co').textContent = r.name;
-    setApp(r.name);
-    $('loading').hidden = true; $('form').hidden = false; $('bottom').hidden = false;
-    refresh();
+    if (!r.ok) { const bad = new Error(r.error); bad.invalid = true; throw bad; }
+    try { localStorage.setItem(cacheKey, r.name); } catch (e) {}
+    if (r.name !== cached) showForm(r.name);
   } catch (e) {
-    $('loading').textContent = e.message === 'Failed to fetch' ? '서버에 연결할 수 없습니다' : e.message;
-    $('loading').style.color = 'var(--red)';
+    if (!e.invalid) { if (!cached) showError('서버에 연결할 수 없습니다'); return; }  // 네트워크 문제: 저장된 정보로 계속 사용
+    try { localStorage.removeItem(cacheKey); } catch (e2) {}
+    showError(e.message);
   }
 })();
 </script></body></html>
