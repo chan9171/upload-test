@@ -32,10 +32,18 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
 .add{display:flex;align-items:center;gap:10px;padding:0 16px;min-height:50px;color:var(--blue);font-weight:500;cursor:pointer}
 .add .plus{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:20px;line-height:1;font-weight:400}
 .add input{display:none}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:.5px solid var(--line)}
+.opt small{display:block;color:var(--sub);font-size:13px;line-height:1.3;margin-top:2px}
+.sw{-webkit-appearance:none;appearance:none;width:51px;height:31px;border-radius:16px;background:var(--fill);position:relative;flex:none;outline:0;border:0;margin:0;transition:background .2s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.sw:checked{background:var(--green)}
+.sw:checked::after{transform:translateX(20px)}
+.sw:disabled{opacity:.4}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:12px;border-top:.5px solid var(--line)}
 .grid:empty{display:none}
 .th{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--fill)}
 .th canvas,.th img{width:100%;height:100%;object-fit:cover;display:block}
+.th .ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--sub);font-size:13px;font-weight:600}
 .th .x{position:absolute;top:4px;right:4px;width:24px;height:24px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:16px;line-height:1;padding:0}
 .alert{margin:14px 0 0;padding:12px 14px;border-radius:12px;font-size:15px;white-space:pre-wrap;background:rgba(255,59,48,.12);color:var(--red)}
 .alert.info{background:var(--fill);color:var(--text)}
@@ -59,6 +67,7 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
 #done h2{font-size:28px;margin:0 0 6px}
 #done .no{font-size:34px;font-weight:700;letter-spacing:.5px;margin:18px 0 4px;font-variant-numeric:tabular-nums}
 #done p{color:var(--sub);margin:0}
+#done .tm{font-size:12px;margin-top:22px}
 </style></head>
 <body>
 <main>
@@ -78,6 +87,7 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
     <div class="title"><span>사진</span><span id="cnt"></span></div>
     <div class="group">
       <label class="add" id="addbtn"><span class="plus">+</span>사진 선택 또는 촬영<input id="pick" type="file" accept="image/*" multiple></label>
+      <div class="opt"><div>원본 화질로 올리기<small>꺼 두면 네이버 블로그에 맞는 크기로 줄여서 훨씬 빠르게 올라갑니다</small></div><input id="orig" class="sw" type="checkbox" aria-label="원본 화질로 올리기"></div>
       <div class="grid" id="grid"></div>
     </div>
 
@@ -90,6 +100,7 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
     <p id="donecnt"></p>
     <div class="no" id="doneno"></div>
     <p>접수번호</p>
+    <p class="tm" id="timing"></p>
   </div>
 
   <div id="loading" class="lead" style="margin-top:40px;text-align:center">링크를 확인하는 중…</div>
@@ -105,17 +116,20 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
 
 <script src="config.js"></script>
 <script>
-const CHUNK = 4 * 1024 * 1024; // 256KB 배수
+const CHUNK = 8 * 1024 * 1024;           // 256KB 배수
 const MAX_FILES = 30, MAX_BYTES = 25 * 1024 * 1024;
+const LONG_EDGE = 1920, QUALITY = 0.85;  // 네이버 블로그용 크기 (긴 변 기준). 값을 바꾸면 압축 크기가 달라진다
+const KEEP_UNDER = 1.5 * 1024 * 1024;    // 이미 작은 JPEG 는 다시 압축하지 않는다
+const PARALLEL = 2;                      // 동시에 올리는 사진 수
 const TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
 const $ = id => document.getElementById(id);
 const token = new URLSearchParams(location.search).get('t') || '';
 // text/plain 으로 보내 CORS preflight 를 피한다
 const api = body => fetch(API_URL, { method: 'POST', body: JSON.stringify({ token, ...body }) }).then(r => r.json());
 
-let photos = [];   // { file, type, key, el }
-let job = null;    // { receiptNo, files:[File] } 접수 시작 후 고정
-let busy = false;
+let photos = [];     // { file, origType, key, el, state:'prep'|'ready', blob, sendType, thumbed }
+let job = null;      // { receiptNo, blobs:[Blob], t } 접수를 시작한 뒤 고정
+let busy = false, autoTries = 0, resumeChecked = false;
 
 const typeOf = f => {
   if (Object.values(TYPES).includes(f.type)) return f.type;
@@ -126,30 +140,69 @@ function alertBox(t, info) { const a = $('alert'); a.hidden = !t; a.textContent 
 function setStatus(t) { $('status').textContent = t || ''; }
 
 function refresh() {
-  const total = photos.reduce((s, p) => s + p.file.size, 0);
-  $('cnt').textContent = photos.length ? `${photos.length}/${MAX_FILES}장 · ${mbOf(total)}` : '';
-  const ok = $('vehicle').value.trim() && $('work').value.trim() && photos.length > 0;
-  $('go').disabled = busy || !ok;
+  const ready = photos.filter(p => p.state === 'ready').length;
+  const total = photos.reduce((s, p) => s + (p.blob ? p.blob.size : p.file.size), 0);
+  $('cnt').textContent = !photos.length ? '' : ready < photos.length ? `준비 중 ${ready}/${photos.length}` : `${photos.length}/${MAX_FILES}장 · ${mbOf(total)}`;
+  const ok = $('vehicle').value.trim() && $('work').value.trim() && photos.length > 0 && ready === photos.length;
+  $('go').disabled = busy || !!job || !ok;
+  $('go').textContent = photos.length && ready < photos.length ? '사진 준비 중…' : '업로드';
   $('pick').disabled = busy || !!job;
+  $('orig').disabled = busy || !!job;
   $('addbtn').style.opacity = (busy || job) ? .4 : 1;
   document.querySelectorAll('.th .x').forEach(b => b.hidden = busy || !!job);
-  ['vehicle', 'work', 'note'].forEach(id => $(id).disabled = busy);
+  ['vehicle', 'work', 'note'].forEach(id => $(id).disabled = busy || !!job);
 }
 ['vehicle', 'work'].forEach(id => $(id).addEventListener('input', refresh));
 
-// 작은 미리보기를 만든다 (큰 원본을 그대로 그리면 폰 메모리를 많이 쓴다)
-async function thumb(file) {
-  try {
-    const bm = await createImageBitmap(file, { resizeWidth: 240, resizeQuality: 'low' });
-    const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height;
-    c.getContext('2d').drawImage(bm, 0, 0); if (bm.close) bm.close();
-    return c;
-  } catch (e) {
-    const i = new Image(); i.decoding = 'async'; i.src = URL.createObjectURL(file); i.onload = () => URL.revokeObjectURL(i.src);
-    return i;
+// ---------- 사진 준비: 미리보기 + (필요하면) 네이버 블로그용 크기로 줄이기 ----------
+const toBlob = (c, type, q) => new Promise(res => c.toBlob(res, type, q));
+
+async function prepare(p) {
+  if (!photos.includes(p)) return;
+  let bm = null;
+  try { bm = await createImageBitmap(p.file, { imageOrientation: 'from-image' }); }
+  catch (e) { try { bm = await createImageBitmap(p.file); } catch (e2) {} }
+
+  if (!p.thumbed) {
+    p.thumbed = true;
+    if (bm) {
+      const s = 240 / Math.max(bm.width, bm.height), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bm.width * s)); c.height = Math.max(1, Math.round(bm.height * s));
+      c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height);
+      p.el.prepend(c);
+    } else {
+      const t = document.createElement('span'); t.className = 'ph'; t.textContent = (p.file.name.split('.').pop() || '사진').toUpperCase();
+      p.el.prepend(t);
+    }
   }
+
+  p.blob = p.file; p.sendType = p.origType;
+  if (bm && !$('orig').checked) {
+    const long = Math.max(bm.width, bm.height);
+    if (!(long <= LONG_EDGE && p.origType === 'image/jpeg' && p.file.size <= KEEP_UNDER)) {
+      const k = Math.min(1, LONG_EDGE / long), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bm.width * k)); c.height = Math.max(1, Math.round(bm.height * k));
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bm, 0, 0, c.width, c.height);
+      const b = await toBlob(c, 'image/jpeg', QUALITY);
+      if (b && b.size < p.file.size) { p.blob = b; p.sendType = 'image/jpeg'; }   // 줄어든 경우에만 사용
+      c.width = c.height = 0;
+    }
+  }
+  if (bm && bm.close) bm.close();
+  p.state = 'ready'; refresh();
 }
-let thumbChain = Promise.resolve();
+
+let chain = Promise.resolve();
+const queuePrepare = p => {
+  p.state = 'prep';
+  chain = chain.then(() => prepare(p)).catch(() => { p.blob = p.blob || p.file; p.sendType = p.sendType || p.origType; p.state = 'ready'; refresh(); });
+};
+
+try { $('orig').checked = localStorage.getItem('orig') === '1'; } catch (e) {}
+$('orig').onchange = () => {
+  try { localStorage.setItem('orig', $('orig').checked ? '1' : '0'); } catch (e) {}
+  photos.forEach(queuePrepare); refresh();
+};
 
 $('pick').onchange = () => {
   const skipped = [];
@@ -159,23 +212,48 @@ $('pick').onchange = () => {
     if (!type) { skipped.push(`${f.name}: 이미지 파일이 아닙니다`); continue; }
     if (f.size > MAX_BYTES) { skipped.push(`${f.name}: 25MB를 넘습니다 (${mbOf(f.size)})`); continue; }
     if (photos.length >= MAX_FILES) { skipped.push(`${f.name}: 사진은 최대 ${MAX_FILES}장까지 가능합니다`); continue; }
-    const p = { file: f, type, key, el: document.createElement('div') };
+    const p = { file: f, origType: type, key, el: document.createElement('div'), state: 'prep', blob: null, sendType: type, thumbed: false };
     p.el.className = 'th';
     const x = document.createElement('button'); x.className = 'x'; x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', '삭제');
     x.onclick = () => { photos = photos.filter(q => q !== p); p.el.remove(); refresh(); };
     p.el.append(x); $('grid').append(p.el); photos.push(p);
-    thumbChain = thumbChain.then(async () => { p.el.prepend(await thumb(f)); });
+    queuePrepare(p);
   }
   $('pick').value = '';
   alertBox(skipped.length ? '다음 사진은 추가하지 않았습니다.\n' + skipped.join('\n') : '', false);
   refresh();
 };
 
-function putRange(url, blob, start, total) {
+// ---------- 폰에 임시 보관 (IndexedDB): 앱을 닫아도 다음에 열면 이어서 올린다 ----------
+let dbp = null;
+const idb = () => dbp || (dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('jshine-upload', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('jobs', { keyPath: 'token' });
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+}));
+const idbTx = async (mode, fn) => {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('jobs', mode), rq = fn(tx.objectStore('jobs'));
+    tx.oncomplete = () => res(rq && rq.result); tx.onerror = tx.onabort = () => rej(tx.error);
+  });
+};
+const idbPut = rec => idbTx('readwrite', s => s.put(rec));
+const idbGet = () => idbTx('readonly', s => s.get(token));
+const idbDel = () => idbTx('readwrite', s => s.delete(token));
+
+// ---------- 화면이 꺼지지 않게 (업로드 중) ----------
+let wl = null;
+async function lockScreen() { try { if ('wakeLock' in navigator && !wl) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; }); } } catch (e) {} }
+function unlockScreen() { try { if (wl) wl.release(); } catch (e) {} wl = null; }
+
+// ---------- 전송 ----------
+function putRange(url, blob, start, total, onProgress) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open('PUT', url);
     x.setRequestHeader('Content-Range', `bytes ${start}-${start + blob.size - 1}/${total}`);
+    if (onProgress) x.upload.onprogress = e => onProgress(e.loaded);
     x.onload = () => ([200, 201, 308].includes(x.status) ? resolve() : reject(new Error('HTTP ' + x.status)));
     x.onerror = () => reject(new Error('network'));
     x.send(blob); // Blob 그대로 전송 (Base64 변환 없음, 메모리에 전체를 올리지 않음)
@@ -191,72 +269,130 @@ async function withRetry(fn, n = 5) {
   }
 }
 
-// 파일은 이름의 순번(01.jpg 등)으로 원본 배열과 연결한다
-async function sendAll(list, files) {
+// 사진 이름의 순번(01.jpg 등)으로 보관해 둔 Blob 과 연결해, PARALLEL 장씩 동시에 올린다
+async function uploadAll(list) {
   const total = list.reduce((s, x) => s + x.size, 0) || 1;
-  let sent = 0, n = 0;
+  const sent = new Map();
+  let next = 0, done = 0, err = null;
   $('barwrap').hidden = false; $('barfill').style.width = '0%';
-  for (const s of list) {
-    const f = files[parseInt(s.name, 10) - 1];
-    n++;
-    for (let off = 0; off < f.size; off += CHUNK) {
-      const part = f.slice(off, Math.min(off + CHUNK, f.size));
-      await withRetry(() => putRange(s.uploadUrl, part, off, f.size));
-      sent += part.size;
-      $('barfill').style.width = Math.round(sent / total * 100) + '%';
-      setStatus(`${n}/${list.length}장 올리는 중 · ${Math.round(sent / total * 100)}%`);
+  const upd = () => {
+    const pct = Math.min(100, Math.round([...sent.values()].reduce((a, b) => a + b, 0) / total * 100));
+    $('barfill').style.width = pct + '%'; setStatus(`${done}/${list.length}장 완료 · ${pct}%`);
+  };
+  const worker = async () => {
+    while (!err && next < list.length) {
+      const s = list[next++], blob = job.blobs[parseInt(s.name, 10) - 1];
+      try {
+        for (let off = 0; off < blob.size; off += CHUNK) {
+          const part = blob.slice(off, Math.min(off + CHUNK, blob.size));
+          await withRetry(() => putRange(s.uploadUrl, part, off, blob.size, n => { sent.set(s.name, off + n); upd(); }));
+          sent.set(s.name, off + part.size); upd();
+        }
+        done++; upd();
+      } catch (e) { err = err || e; }
     }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, list.length) }, worker));
+  if (err) throw err;
+}
+
+function showDone(no, count, t) {
+  $('form').hidden = true; $('go').hidden = true; $('retry').hidden = true; $('barwrap').hidden = true; setStatus('');
+  $('doneno').textContent = no; $('donecnt').textContent = `사진 ${count}장이 저장되었습니다`;
+  if (t && t.t3) {
+    const s = (a, b) => ((b - a) / 1000).toFixed(1);
+    $('timing').textContent = `준비 ${s(t.t0, t.t1)}초 · 전송 ${s(t.t1, t.t2)}초 · 확인 ${s(t.t2, t.t3)}초`;
   }
+  alertBox('');
+  $('done').hidden = false; $('again').hidden = false;
 }
 
 async function finish() {
   setStatus('저장 확인 중…');
   const c = await api({ action: 'commit', receiptNo: job.receiptNo });
   if (!c.ok) throw new Error('일부 사진이 저장되지 않았습니다.\n"실패한 사진 다시 올리기"를 눌러 주세요.');
-  $('form').hidden = true; $('go').hidden = true; $('retry').hidden = true; $('barwrap').hidden = true; setStatus('');
-  $('doneno').textContent = c.receiptNo; $('donecnt').textContent = `사진 ${c.count}장이 저장되었습니다`;
-  $('done').hidden = false; $('again').hidden = false;
+  if (job.t) job.t.t3 = performance.now();
+  try { await idbDel(); } catch (e) {}
+  const t = job.t; autoTries = 0;
+  showDone(c.receiptNo, c.count, t);
   job = null;
 }
 
 function fail(err) {
-  alertBox(err.message + (job ? `\n접수번호 ${job.receiptNo}` : ''));
+  const m = String(err.message || err);
   setStatus(''); $('barwrap').hidden = true;
-  if (job) $('retry').hidden = false;
+  if (job && /이미 완료된 접수/.test(m)) { const j = job; idbDel().catch(() => {}); job = null; showDone(j.receiptNo, j.blobs.length); return; }
+  if (job && /접수 내역이 없습니다/.test(m)) {
+    idbDel().catch(() => {}); job = null; refresh();
+    alertBox('이전 업로드 기록이 서버에 없어 정리했습니다.\n처음부터 다시 올려 주세요'); return;
+  }
+  const net = m === 'network' || m === 'Failed to fetch' || /^HTTP /.test(m);
+  alertBox(m + (job ? `\n접수번호 ${job.receiptNo}` : ''));
+  if (job) {
+    $('retry').hidden = false;
+    if (net && autoTries < 3) {
+      autoTries++; setStatus(`연결이 끊겨 잠시 후 다시 시도합니다 (${autoTries}/3)`);
+      setTimeout(() => { if (!busy && job) runResume(); }, 3000);
+    }
+  }
 }
 
 const guard = e => { e.preventDefault(); e.returnValue = ''; };
 function setBusy(b) { busy = b; b ? addEventListener('beforeunload', guard) : removeEventListener('beforeunload', guard); refresh(); }
 
 $('go').onclick = async () => {
-  if (busy) return;
-  alertBox(''); $('retry').hidden = true; setBusy(true);
+  if (busy || job || photos.some(p => p.state !== 'ready')) return;
+  alertBox(''); $('retry').hidden = true; autoTries = 0; setBusy(true); lockScreen();
+  const t = { t0: performance.now() };
   try {
     setStatus('업로드 준비 중…');
-    const files = photos.map(p => p.file);
+    const items = photos.map(p => ({ blob: p.blob, name: p.file.name, type: p.sendType }));
     const b = await api({ action: 'begin', vehicle: $('vehicle').value, work: $('work').value, note: $('note').value,
-      files: photos.map(p => ({ name: p.file.name, size: p.file.size, type: p.type })) });
+      files: items.map(f => ({ name: f.name, size: f.blob.size, type: f.type })) });
     if (!b.ok) throw new Error(b.error);
-    job = { receiptNo: b.receiptNo, files };
-    await sendAll(b.files, files);
+    t.t1 = performance.now();
+    job = { receiptNo: b.receiptNo, blobs: items.map(f => f.blob), t };
+    try { await idbPut({ token, receiptNo: b.receiptNo, at: Date.now(), files: job.blobs.map(blob => ({ blob })) }); } catch (e) {}
+    await uploadAll(b.files);
+    t.t2 = performance.now();
     await finish();
-  } catch (err) { fail(err); } finally { setBusy(false); }
+  } catch (err) { fail(err); } finally { setBusy(false); unlockScreen(); }
 };
 
-$('retry').onclick = async () => {
+async function runResume() {
   if (busy || !job) return;
-  alertBox(''); $('retry').hidden = true; setBusy(true);
+  alertBox(''); $('retry').hidden = true; setBusy(true); lockScreen();
+  job.t = null;
   try {
-    setStatus('다시 올리는 중…');
+    setStatus('이어서 올리는 중…');
     const r = await api({ action: 'resume', receiptNo: job.receiptNo });
     if (!r.ok) throw new Error(r.error);
-    await sendAll(r.files, job.files);
+    if (r.files.length) await uploadAll(r.files);
     await finish();
-  } catch (err) { fail(err); } finally { setBusy(false); }
-};
+  } catch (err) { fail(err); } finally { setBusy(false); unlockScreen(); }
+}
+$('retry').onclick = () => { autoTries = 0; runResume(); };
+
+// 앱을 닫았다가 다시 열었을 때, 끝내지 못한 업로드가 있으면 자동으로 이어서 올린다
+async function maybeResume() {
+  if (resumeChecked || busy || job) return;
+  resumeChecked = true;
+  let rec; try { rec = await idbGet(); } catch (e) { return; }
+  if (!rec || !rec.files || !rec.files.length) return;
+  job = { receiptNo: rec.receiptNo, blobs: rec.files.map(f => f.blob), t: null };
+  alertBox(`이전에 끝내지 못한 업로드(접수번호 ${rec.receiptNo})를 이어서 올립니다`, true);
+  refresh(); runResume();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (busy) lockScreen();                                    // 화면 꺼짐 방지는 앱이 다시 보일 때 다시 건다
+  else if (job && !$('retry').hidden) runResume();           // 끊긴 업로드는 앱으로 돌아오면 바로 이어간다
+});
 
 $('again').onclick = () => location.reload();
 
+// ---------- 홈 화면 앱 정보와 시작 ----------
 // 홈 화면에 추가할 때 쓸 앱 이름("업체명 업로더")과 설치 정보. 시작 주소에 업체 토큰이 그대로 들어간다
 function setApp(name) {
   const title = name + ' 업로더';
@@ -282,7 +418,7 @@ function showError(t) {
   $('form').hidden = true; $('bottom').hidden = true;
   $('loading').hidden = false; $('loading').textContent = t; $('loading').style.color = 'var(--red)';
 }
-if (cached) showForm(cached);
+if (cached) { showForm(cached); maybeResume(); }
 
 (async () => {
   try {
@@ -290,6 +426,7 @@ if (cached) showForm(cached);
     if (!r.ok) { const bad = new Error(r.error); bad.invalid = true; throw bad; }
     try { localStorage.setItem(cacheKey, r.name); } catch (e) {}
     if (r.name !== cached) showForm(r.name);
+    maybeResume();
   } catch (e) {
     if (!e.invalid) { if (!cached) showError('서버에 연결할 수 없습니다'); return; }  // 네트워크 문제: 저장된 정보로 계속 사용
     try { localStorage.removeItem(cacheKey); } catch (e2) {}
