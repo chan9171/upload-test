@@ -48,6 +48,15 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
 .alert{margin:14px 0 0;padding:12px 14px;border-radius:12px;font-size:15px;white-space:pre-wrap;background:rgba(255,59,48,.12);color:var(--red)}
 .alert.info{background:var(--fill);color:var(--text)}
 .alert[hidden]{display:none}
+/* 도움말 */
+.help details{border-bottom:.5px solid var(--line)}
+.help details:last-child{border-bottom:0}
+.help summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:500}
+.help summary::-webkit-details-marker{display:none}
+.help summary::after{content:"›";color:var(--sub);font-size:22px;transition:transform .15s}
+.help details[open] summary::after{transform:rotate(90deg)}
+.help p{margin:0;padding:0 16px 14px;color:var(--sub);font-size:15px;line-height:1.45}
+.help a{color:var(--blue)}
 /* 업로드 현황 */
 #queue{margin-top:18px}
 #queue[hidden]{display:none}
@@ -98,6 +107,15 @@ textarea{display:block;width:100%;border:0;background:transparent;color:var(--te
     </div>
 
     <div class="alert" id="alert" hidden></div>
+
+    <div class="title"><span>도움말</span></div>
+    <div class="group help">
+      <details><summary>사진은 어떻게 올라가나요?</summary><p>사진은 네이버 블로그에 올리기 좋은 크기(긴 변 1920px)로 자동으로 줄여서 올라가서 더 빠릅니다. 원본 그대로 올리려면 '원본 화질로 올리기'를 켜세요. 한 번에 최대 30장, 사진 한 장은 25MB까지 가능합니다.</p></details>
+      <details><summary>올리는 중에 다른 작업을 올려도 되나요?</summary><p>네. 업로드를 누르면 바로 입력 화면이 비워지고, 위쪽 '업로드 현황'에서 진행을 볼 수 있습니다. 여러 작업은 순서대로 한 건씩 올라갑니다.</p></details>
+      <details><summary>올리다가 앱을 닫았어요</summary><p>앱이 열려 있는 동안에만 전송됩니다. 닫아도 사진은 폰에 보관되어, 앱을 다시 열면 자동으로 이어서 올라갑니다. 올리는 동안에는 화면을 켜 두세요.</p></details>
+      <details><summary>실패했다고 나와요</summary><p>해당 작업 줄의 '다시 시도'를 눌러 주세요. 계속 실패하면 접수번호와 화면 캡처를 관리자에게 보내 주세요. '유효하지 않거나 폐기된 링크입니다'가 나오면 관리자에게 새 링크를 요청하세요.</p></details>
+      <details><summary>앱처럼 설치하려면</summary><p>홈 화면에 추가하면 아이콘으로 바로 열 수 있습니다. 방법은 <a href="help.html">설치 안내</a>를 확인하세요.</p></details>
+    </div>
   </div>
 
   <div id="loading" class="lead" style="margin-top:40px;text-align:center">링크를 확인하는 중…</div>
@@ -115,6 +133,8 @@ const MAX_FILES = 30, MAX_BYTES = 25 * 1024 * 1024;
 const LONG_EDGE = 1920, QUALITY = 0.85;  // 네이버 블로그용 크기 (긴 변 기준). 값을 바꾸면 압축 크기가 달라진다
 const KEEP_UNDER = 1.5 * 1024 * 1024;    // 이미 작은 JPEG 는 다시 압축하지 않는다
 const PARALLEL = 2;                      // 한 작업 안에서 동시에 올리는 사진 수
+const PARALLEL_SMALL = 3;                // 사진이 작을 땐(평균 2MB 미만) 동시에 더 많이 올린다
+const BUILD = '2026-11-11-c';            // 화면을 고칠 때마다 바꾼다. 앱이 열릴 때 이 값이 다르면 새 화면을 자동으로 다시 불러온다
 const TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
 const $ = id => document.getElementById(id);
 const token = new URLSearchParams(location.search).get('t') || '';
@@ -323,7 +343,8 @@ async function uploadAll(j, list) {
       } catch (e) { err = err || e; }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(PARALLEL, list.length) }, worker));
+  const par = total / list.length < 2 * 1048576 ? PARALLEL_SMALL : PARALLEL;
+  await Promise.all(Array.from({ length: Math.min(par, list.length) }, worker));
   if (err) throw err;
 }
 
@@ -457,5 +478,17 @@ if (cached) { showForm(cached); loadSaved(); }
     try { localStorage.removeItem(cacheKey); } catch (e2) {}
     showError(e.message);
   }
+})();
+
+// 서버에 더 새로운 화면이 있으면 자동으로 다시 불러온다 (입력 중이거나 업로드 중이면 건드리지 않는다)
+(async () => {
+  try {
+    const t = await (await fetch(location.pathname, { cache: 'no-store' })).text();
+    const m = t.match(/const BUILD = '([^']+)'/);
+    if (!m || m[1] === BUILD) return;
+    const k = 'reloaded:' + m[1];
+    if (sessionStorage.getItem(k) || photos.length || isActive() || $('vehicle').value || $('work').value) return;
+    sessionStorage.setItem(k, '1'); location.reload();
+  } catch (e) {}
 })();
 </script></body></html>
